@@ -1,20 +1,42 @@
 {
-  "name": "logo_num_add",
+  "name": "brandflow-ai",
+  "private": true,
   "version": "1.0.0",
-  "main": "index.js",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "backend": "node api/index.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
   "dependencies": {
+    "axios": "^1.15.0",
+    "framer-motion": "^12.38.0",
+    "lucide-react": "^1.8.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "express": "^4.21.2",
+    "sharp": "^0.33.5",
+    "multer": "^1.4.5-lts.1",
     "archiver": "^7.0.1",
-    "cors": "^2.8.6",
-    "express": "^5.2.1",
-    "multer": "^2.1.1",
-    "sharp": "^0.34.5",
-    "uuid": "^13.0.0"
+    "cors": "^2.8.5",
+    "uuid": "^11.0.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "autoprefixer": "^10.5.0",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.4.0",
+    "postcss": "^8.5.10",
+    "tailwindcss": "^4.2.2",
+    "vite": "^8.0.4",
+    "vite-plugin-pwa": "^0.21.1"
   }
 }
