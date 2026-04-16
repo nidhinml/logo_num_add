@@ -2,6 +2,10 @@
   "version": 2,
   "rewrites": [
     {
+      "source": "/api/blob-upload",
+      "destination": "/api/blob-upload.js"
+    },
+    {
       "source": "/api/process-single",
       "destination": "/api/process-single.js"
     },

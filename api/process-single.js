@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
+const axios = require('axios');
 const processor = require('./processor');
 
 const app = express();
@@ -11,26 +12,37 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
 /**
- * Handle Single Image Processing (To bypass 4.5MB batch limits)
+ * Handle Single Image Processing
+ * Supports both File Upload (Buffer) AND Blob URL
  */
 app.post('/api/process-single', upload.fields([
     { name: 'image', maxCount: 1 },
     { name: 'logo', maxCount: 1 }
 ]), async (req, res) => {
     try {
-        const { logoSettings, whatsappSettings } = req.body;
+        const { logoSettings, whatsappSettings, imagePwaUrl } = req.body;
         const parsedLogoSettings = JSON.parse(logoSettings || '{}');
         const parsedWhatsappSettings = JSON.parse(whatsappSettings || '{}');
         
-        const imageFile = req.files['image'] ? req.files['image'][0] : null;
         const logoFile = req.files['logo'] ? req.files['logo'][0] : null;
+        let imageBuffer = null;
 
-        if (!imageFile) {
+        // Option A: Direct upload (Subject to 4.5MB limit)
+        if (req.files['image']) {
+            imageBuffer = req.files['image'][0].buffer;
+        } 
+        // Option B: Vercel Blob URL (Supports huge images)
+        else if (imagePwaUrl) {
+            const response = await axios.get(imagePwaUrl, { responseType: 'arraybuffer' });
+            imageBuffer = Buffer.from(response.data);
+        }
+
+        if (!imageBuffer) {
             return res.status(400).json({ error: 'No image provided' });
         }
 
         const processedBuffer = await processor.processImage(
-            imageFile.buffer,
+            imageBuffer,
             logoFile ? logoFile.buffer : null,
             parsedLogoSettings,
             parsedWhatsappSettings
@@ -39,7 +51,7 @@ app.post('/api/process-single', upload.fields([
         res.set('Content-Type', 'image/png');
         res.send(processedBuffer);
     } catch (error) {
-        console.error('Single process error:', error);
+        console.error('Process error:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });

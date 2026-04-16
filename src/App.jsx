@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Image as ImageIcon, CheckCircle, Download, Trash2, Smartphone, Monitor, RefreshCw, Share2, Loader2 } from 'lucide-react';
+import { Upload, Image as ImageIcon, CheckCircle, Download, Trash2, Smartphone, Monitor, RefreshCw, Share2, Loader2, Zap } from 'lucide-react';
 import axios from 'axios';
 import JSZip from 'jszip';
+import { upload } from '@vercel/blob/client';
 import BrandingControls from './components/BrandingControls';
 import ImagePreview from './components/ImagePreview';
 import Uploader from './components/Uploader';
@@ -35,7 +36,8 @@ function App() {
     isProcessing: false,
     currentStep: 0,
     totalSteps: 0,
-    processedFiles: [] // { name: string, blob: Blob }
+    status: '', // 'Uploading...', 'Branding...'
+    processedFiles: [] 
   });
 
   const [canShare, setCanShare] = useState(false);
@@ -62,7 +64,7 @@ function App() {
   };
 
   /**
-   * Sequential Processing Flow (Bypasses Vercel 4.5MB limit)
+   * Advanced Sequential Processing (Bypasses Vercel 4.5MB limit using Vercel Blob)
    */
   const handleProcessSequential = async (mode = 'zip') => {
     if (images.length === 0) return;
@@ -71,6 +73,7 @@ function App() {
       isProcessing: true,
       currentStep: 0,
       totalSteps: images.length,
+      status: 'Initializing...',
       processedFiles: []
     });
 
@@ -79,14 +82,43 @@ function App() {
 
     try {
       for (let i = 0; i < images.length; i++) {
-        setProcessingState(prev => ({ ...prev, currentStep: i + 1 }));
-        
         const img = images[i];
+        const isLarge = img.file.size > 4 * 1024 * 1024; // > 4MB
+        
+        setProcessingState(prev => ({ 
+          ...prev, 
+          currentStep: i + 1,
+          status: isLarge ? 'Uploading Large Image...' : 'Sending to Brand...' 
+        }));
+        
+        let blobUrl = null;
+        if (isLarge) {
+          // 1. Client-side upload to Vercel Blob for large files
+          try {
+            const blob = await upload(`branding/${img.name}`, img.file, {
+              access: 'public',
+              handleUploadUrl: '/api/blob-upload'
+            });
+            blobUrl = blob.url;
+          } catch (blobErr) {
+            console.error('Blob upload failed', blobErr);
+            // Fallback to direct upload if blob fails (might still fail 413)
+          }
+        }
+
+        // 2. Request branding from the backend
         const formData = new FormData();
-        formData.append('image', img.file);
+        if (blobUrl) {
+          formData.append('imagePwaUrl', blobUrl);
+        } else {
+          formData.append('image', img.file);
+        }
+        
         if (logo) formData.append('logo', logo.file);
         formData.append('logoSettings', JSON.stringify(logoSettings));
         formData.append('whatsappSettings', JSON.stringify(whatsappSettings));
+
+        setProcessingState(prev => ({ ...prev, status: 'Branding...' }));
 
         const res = await axios.post(`${API_BASE}/process-single`, formData, {
           responseType: 'blob'
@@ -94,8 +126,12 @@ function App() {
 
         const processedBlob = new Blob([res.data], { type: 'image/png' });
         results.push({ name: img.name, blob: processedBlob });
-        zip.file(img.name.replace(/\.[^/.]+$/, "") + "_branded.png", processedBlob);
+        
+        const fileName = img.name.replace(/\.[^/.]+$/, "") + "_branded.png";
+        zip.file(fileName, processedBlob);
       }
+
+      setProcessingState(prev => ({ ...prev, status: 'Finalizing...' }));
 
       if (mode === 'zip') {
         const zipBlob = await zip.generateAsync({ type: 'blob' });
@@ -107,30 +143,30 @@ function App() {
         link.click();
         link.remove();
       } else if (mode === 'share' && canShare) {
-        // Prepare files for Native Share
-        const shareFiles = results.map(r => new File([r.blob], r.name, { type: 'image/png' }));
+        const shareFiles = results.map(r => new File([r.blob], r.name.replace(/\.[^/.]+$/, "") + ".png", { type: 'image/png' }));
         try {
           await navigator.share({
             files: shareFiles,
             title: 'Branded Images',
-            text: 'Here are your branded images!'
+            text: 'Your branded images are ready!'
           });
         } catch (err) {
-          console.log('Share result:', err);
+          console.log('Share error', err);
         }
       }
 
       setProcessingState(prev => ({ ...prev, processedFiles: results }));
     } catch (err) {
-      alert('Processing failed: ' + (err.response?.status === 413 ? "File too large for Vercel (4.5MB limit)" : err.message));
+      console.error(err);
+      alert('Error: ' + (err.response?.status === 413 ? "File too large. Ensure Vercel Blob is connected." : err.message));
     } finally {
-      setProcessingState(prev => ({ ...prev, isProcessing: false }));
+      setProcessingState(prev => ({ ...prev, isProcessing: false, status: '' }));
     }
   };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
-      <header className="h-16 border-b border-slate-800 flex items-center justify-between px-8 sticky top-0 bg-slate-950/80 backdrop-blur-md z-50">
+      <header className="h-16 border-b border-slate-800 flex items-center justify-between px-8 sticky top-0 bg-slate-950/80 backdrop-blur-md z-50 overflow-hidden">
         <div className="flex items-center gap-2">
           <div className="bg-primary-500 p-2 rounded-lg">
             <ImageIcon className="w-6 h-6 text-white" />
@@ -146,7 +182,7 @@ function App() {
           >
             {processingState.isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
             {processingState.isProcessing 
-              ? `Processing ${processingState.currentStep}/${processingState.totalSteps}...` 
+              ? `${processingState.status} (${processingState.currentStep}/${processingState.totalSteps})` 
               : 'Download ZIP'
             }
           </button>
@@ -154,9 +190,14 @@ function App() {
       </header>
 
       <div className="flex-1 flex overflow-hidden flex-col md:flex-row">
-        <aside className="w-full md:w-80 border-r border-slate-800 overflow-y-auto p-6 flex flex-col gap-8 bg-slate-950 z-40 shadow-2xl">
+        <aside className="w-full md:w-80 border-r border-slate-800 overflow-y-auto p-6 flex flex-col gap-8 bg-slate-950 z-40 shadow-2xl transition-all">
           <section>
-            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Base Images</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Base Images</h2>
+              <span className="bg-primary-900/40 text-primary-400 text-[10px] px-2 py-0.5 rounded-full border border-primary-800/30 flex items-center gap-1">
+                <Zap className="w-2.5 h-2.5" /> High-Res Ready
+              </span>
+            </div>
             <Uploader 
               onUpload={handleLocalUpload} 
               multiple={true} 
@@ -185,9 +226,9 @@ function App() {
                 <img src={logo.url} alt="Logo" className="max-h-20 mx-auto object-contain" />
                 <button 
                   onClick={() => setLogo(null)}
-                  className="absolute -top-2 -right-2 bg-red-500 p-1.5 rounded-full shadow-lg hover:scale-110 transition-transform"
+                  className="absolute -top-2 -right-2 bg-red-500 p-1.5 rounded-full shadow-lg hover:rotate-90 transition-all duration-300"
                 >
-                  <Trash2 className="w-3 h-3 text-white" />
+                  <Trash2 className="w-3" />
                 </button>
               </div>
             )}
@@ -208,10 +249,10 @@ function App() {
                 <Upload className="w-10 h-10" />
               </div>
               <p className="text-xl font-medium">Ready for your content</p>
-              <p className="text-sm">Upload images to see live branding preview</p>
+              <p className="text-sm">Vercel Blob enabled for massive images</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 pb-24">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 pb-28">
               {images.map((img, idx) => (
                 <ImagePreview 
                   key={idx}
@@ -228,14 +269,14 @@ function App() {
       </div>
 
       {images.length > 0 && canShare && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100]">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] w-full max-w-xs px-4">
           <button 
             onClick={() => handleProcessSequential('share')}
             disabled={processingState.isProcessing}
-            className="bg-green-600 hover:bg-green-500 text-white px-8 py-4 rounded-full font-bold shadow-2xl flex items-center gap-3 transition-all scale-100 hover:scale-105 active:scale-95"
+            className="w-full bg-green-600 hover:bg-green-500 text-white py-4 rounded-3xl font-bold shadow-[0_20px_50px_rgba(22,163,74,0.4)] flex items-center justify-center gap-3 transition-all transform hover:-translate-y-1 active:scale-95"
           >
             {processingState.isProcessing ? <Loader2 className="w-6 h-6 animate-spin" /> : <Share2 className="w-6 h-6" />}
-            {processingState.isProcessing ? 'Baking Images...' : 'Save Directly to Photos'}
+            {processingState.isProcessing ? 'Baking...' : 'Save Directly to Photos'}
           </button>
         </div>
       )}
