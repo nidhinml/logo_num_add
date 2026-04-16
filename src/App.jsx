@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Image as ImageIcon, CheckCircle, Download, Trash2, Smartphone, Monitor, RefreshCw, Share2 } from 'lucide-react';
+import { Upload, Image as ImageIcon, CheckCircle, Download, Trash2, Smartphone, Monitor, RefreshCw, Share2, Loader2 } from 'lucide-react';
 import axios from 'axios';
+import JSZip from 'jszip';
 import BrandingControls from './components/BrandingControls';
 import ImagePreview from './components/ImagePreview';
 import Uploader from './components/Uploader';
@@ -29,8 +30,14 @@ function App() {
     showNumber: true,
     fontStyle: 'modern'
   });
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [downloadUrl, setDownloadUrl] = useState(null);
+  
+  const [processingState, setProcessingState] = useState({
+    isProcessing: false,
+    currentStep: 0,
+    totalSteps: 0,
+    processedFiles: [] // { name: string, blob: Blob }
+  });
+
   const [canShare, setCanShare] = useState(false);
 
   useEffect(() => {
@@ -54,52 +61,70 @@ function App() {
     });
   };
 
-  const handleProcess = async (mode = 'download') => {
+  /**
+   * Sequential Processing Flow (Bypasses Vercel 4.5MB limit)
+   */
+  const handleProcessSequential = async (mode = 'zip') => {
     if (images.length === 0) return;
-    setIsProcessing(true);
-    setDownloadUrl(null);
-
-    const formData = new FormData();
-    images.forEach(img => formData.append('images', img.file));
-    if (logo) formData.append('logo', logo.file);
     
-    formData.append('logoSettings', JSON.stringify(logoSettings));
-    formData.append('whatsappSettings', JSON.stringify(whatsappSettings));
+    setProcessingState({
+      isProcessing: true,
+      currentStep: 0,
+      totalSteps: images.length,
+      processedFiles: []
+    });
+
+    const results = [];
+    const zip = new JSZip();
 
     try {
-      const res = await axios.post(`${API_BASE}/process-batch`, formData, {
-        responseType: 'blob'
-      });
-      
-      const blob = new Blob([res.data], { type: 'application/zip' });
-      const url = URL.createObjectURL(blob);
-      setDownloadUrl(url);
+      for (let i = 0; i < images.length; i++) {
+        setProcessingState(prev => ({ ...prev, currentStep: i + 1 }));
+        
+        const img = images[i];
+        const formData = new FormData();
+        formData.append('image', img.file);
+        if (logo) formData.append('logo', logo.file);
+        formData.append('logoSettings', JSON.stringify(logoSettings));
+        formData.append('whatsappSettings', JSON.stringify(whatsappSettings));
 
-      if (mode === 'share' && canShare) {
-        // Native Share API for mobile (Saving to Photos)
-        const file = new File([res.data], 'branded_images.zip', { type: 'application/zip' });
-        try {
-          await navigator.share({
-            files: [file],
-            title: 'Branded Images',
-            text: 'Your branded images are ready!'
-          });
-        } catch (err) {
-          console.log('Share failed or cancelled', err);
-        }
-      } else {
+        const res = await axios.post(`${API_BASE}/process-single`, formData, {
+          responseType: 'blob'
+        });
+
+        const processedBlob = new Blob([res.data], { type: 'image/png' });
+        results.push({ name: img.name, blob: processedBlob });
+        zip.file(img.name.replace(/\.[^/.]+$/, "") + "_branded.png", processedBlob);
+      }
+
+      if (mode === 'zip') {
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        const url = URL.createObjectURL(zipBlob);
         const link = document.createElement('a');
         link.href = url;
         link.setAttribute('download', 'branded_images.zip');
         document.body.appendChild(link);
         link.click();
         link.remove();
+      } else if (mode === 'share' && canShare) {
+        // Prepare files for Native Share
+        const shareFiles = results.map(r => new File([r.blob], r.name, { type: 'image/png' }));
+        try {
+          await navigator.share({
+            files: shareFiles,
+            title: 'Branded Images',
+            text: 'Here are your branded images!'
+          });
+        } catch (err) {
+          console.log('Share result:', err);
+        }
       }
 
+      setProcessingState(prev => ({ ...prev, processedFiles: results }));
     } catch (err) {
-      alert('Processing failed: ' + err.message);
+      alert('Processing failed: ' + (err.response?.status === 413 ? "File too large for Vercel (4.5MB limit)" : err.message));
     } finally {
-      setIsProcessing(false);
+      setProcessingState(prev => ({ ...prev, isProcessing: false }));
     }
   };
 
@@ -114,22 +139,16 @@ function App() {
         </div>
         
         <div className="flex items-center gap-3">
-          {canShare && (
-             <button 
-              onClick={() => handleProcess('share')}
-              disabled={images.length === 0 || isProcessing}
-              className="hidden md:flex bg-slate-800 hover:bg-slate-700 disabled:opacity-50 px-5 py-2 rounded-full font-medium transition-all items-center gap-2 border border-slate-700"
-            >
-              <Share2 className="w-4 h-4" /> Share to Phone
-            </button>
-          )}
           <button 
-            onClick={() => handleProcess('download')}
-            disabled={images.length === 0 || isProcessing}
+            onClick={() => handleProcessSequential('zip')}
+            disabled={images.length === 0 || processingState.isProcessing}
             className="bg-primary-600 hover:bg-primary-500 disabled:opacity-50 disabled:cursor-not-allowed px-6 py-2 rounded-full font-medium transition-all flex items-center gap-2 shadow-lg shadow-primary-600/20"
           >
-            {isProcessing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-            {isProcessing ? 'Baking...' : 'Brand All'}
+            {processingState.isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            {processingState.isProcessing 
+              ? `Processing ${processingState.currentStep}/${processingState.totalSteps}...` 
+              : 'Download ZIP'
+            }
           </button>
         </div>
       </header>
@@ -192,7 +211,7 @@ function App() {
               <p className="text-sm">Upload images to see live branding preview</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 pb-20">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 pb-24">
               {images.map((img, idx) => (
                 <ImagePreview 
                   key={idx}
@@ -200,7 +219,7 @@ function App() {
                   logo={logo}
                   logoSettings={logoSettings}
                   whatsappSettings={whatsappSettings}
-                  processed={null}
+                  processed={processingState.processedFiles.find(f => f.name === img.name)}
                 />
               ))}
             </div>
@@ -208,15 +227,15 @@ function App() {
         </main>
       </div>
 
-      {canShare && images.length > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] md:hidden">
+      {images.length > 0 && canShare && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100]">
           <button 
-            onClick={() => handleProcess('share')}
-            disabled={isProcessing}
-            className="bg-green-600 hover:bg-green-500 text-white px-8 py-3 rounded-full font-bold shadow-2xl flex items-center gap-3 animate-in fade-in zoom-in slide-in-from-bottom-10"
+            onClick={() => handleProcessSequential('share')}
+            disabled={processingState.isProcessing}
+            className="bg-green-600 hover:bg-green-500 text-white px-8 py-4 rounded-full font-bold shadow-2xl flex items-center gap-3 transition-all scale-100 hover:scale-105 active:scale-95"
           >
-            {isProcessing ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Share2 className="w-5 h-5" />}
-            Save All to Photos
+            {processingState.isProcessing ? <Loader2 className="w-6 h-6 animate-spin" /> : <Share2 className="w-6 h-6" />}
+            {processingState.isProcessing ? 'Baking Images...' : 'Save Directly to Photos'}
           </button>
         </div>
       )}
