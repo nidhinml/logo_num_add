@@ -1,7 +1,7 @@
 import React from 'react';
-import { Download, ExternalLink, CheckCircle } from 'lucide-react';
+import { Download, ExternalLink, CheckCircle, Share2, Smartphone } from 'lucide-react';
 
-const ImagePreview = ({ image, logo, logoSettings, whatsappSettings, processed }) => {
+const ImagePreview = ({ image, logo, logoSettings, whatsappSettings, processed, onSave }) => {
   const getPositionStyles = (pos) => {
     switch (pos) {
       case 'top-left': return { top: '5%', left: '5%' };
@@ -35,7 +35,7 @@ const ImagePreview = ({ image, logo, logoSettings, whatsappSettings, processed }
   return (
     <div className="flex flex-col gap-3 group">
       <div className="relative aspect-video bg-slate-800 rounded-3xl overflow-hidden border border-slate-700 shadow-2xl transition-all duration-300 hover:border-primary-500/50">
-        <img src={image.url} alt={image.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+        <img src={image.url} alt={image.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
 
         {!processed && logo && (
           <div 
@@ -50,7 +50,7 @@ const ImagePreview = ({ image, logo, logoSettings, whatsappSettings, processed }
             <img 
                src={logo.url} 
                alt="Logo Overlay" 
-               className={`w-full h-auto ${logoSettings.removeBackground ? 'mix-blend-screen' : ''}`} // Preview simulation for background removal
+               className={`w-full h-auto ${logoSettings.removeBackground ? 'mix-blend-screen' : ''}`} 
             />
           </div>
         )}
@@ -79,18 +79,29 @@ const ImagePreview = ({ image, logo, logoSettings, whatsappSettings, processed }
         )}
 
         {processed && (
-          <div className="absolute inset-0 bg-primary-950/60 backdrop-blur-md flex flex-col items-center justify-center animate-in fade-in duration-500">
-            <CheckCircle className="w-16 h-16 text-primary-400 mb-4 animate-bounce" />
-            <span className="text-sm font-bold uppercase tracking-widest text-primary-200">Branded & Saved</span>
+          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xl flex flex-col items-center justify-center p-6 animate-in fade-in zoom-in duration-500">
+            <div className="w-16 h-16 rounded-full bg-primary-500/20 flex items-center justify-center mb-6 ring-4 ring-primary-500/30">
+              <CheckCircle className="w-8 h-8 text-primary-400" />
+            </div>
+            
+            <button 
+              onClick={() => onSave(processed)}
+              className="w-full bg-primary-600 hover:bg-primary-500 text-white py-3 rounded-2xl font-black text-sm shadow-xl shadow-primary-600/30 flex items-center justify-center gap-2 transition-all active:scale-95 group/btn"
+            >
+              <Smartphone className="w-4 h-4 group-hover/btn:rotate-12 transition-transform" />
+              SAVE TO GALLERY
+            </button>
+            <p className="mt-4 text-[10px] text-slate-500 font-bold uppercase tracking-widest text-center">Tap button then "Save Image"</p>
           </div>
         )}
       </div>
       
       <div className="px-2 flex justify-between items-center group-hover:translate-x-1 transition-transform">
-        <span className="text-xs font-medium text-slate-500 truncate max-w-[200px]">{image.name}</span>
+        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter truncate max-w-[200px]">{image.name}</span>
+        {processed && <span className="text-[10px] text-primary-500 font-bold">READY</span>}
       </div>
     </div>
   );
 };
 
-export default ImagePreview;
+export default ImageProcessorPreview;

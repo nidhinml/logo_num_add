@@ -161,6 +161,24 @@ function App() {
     }
   };
 
+  /**
+   * Share/Save Individual Image to Gallery
+   */
+  const handleShareIndividual = async (processedFile) => {
+    if (!canShare) return;
+    
+    try {
+      const file = new File([processedFile.blob], processedFile.name.replace(/\.[^/.]+$/, "") + ".png", { type: 'image/png' });
+      await navigator.share({
+        files: [file],
+        title: 'Branded Image',
+        text: 'Save this image to your gallery'
+      });
+    } catch (err) {
+      console.log('Individual share canceled');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       <header className="h-16 border-b border-slate-800 flex items-center justify-between px-8 sticky top-0 bg-slate-950/80 backdrop-blur-md z-50">
@@ -249,6 +267,7 @@ function App() {
                   logoSettings={logoSettings}
                   whatsappSettings={whatsappSettings}
                   processed={processingState.processedFiles.find(f => f.name === img.name)}
+                  onSave={handleShareIndividual}
                 />
               ))}
             </div>

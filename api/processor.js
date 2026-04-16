@@ -73,8 +73,8 @@ class ImageProcessor {
             if (size === 'small') scale = 0.1;
             if (size === 'large') scale = 0.3;
             if (typeof size === 'number') scale = size / 100;
-            const targetWidth = Math.round(imgMetadata.width * scale);
-            logo = logo.resize({ width: targetWidth });
+            const targetWidth = Math.min(Math.round(imgMetadata.width * scale), imgMetadata.width);
+            logo = logo.resize({ width: targetWidth, height: imgMetadata.height, fit: 'inside' });
         }
 
         if (opacity < 1) {
