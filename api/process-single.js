@@ -1,9 +1,9 @@
-const express = require('express');
-const cors = require('cors');
-const multer = require('multer');
-const axios = require('axios');
-const { put } = require('@vercel/blob');
-const processor = require('./processor');
+import express from 'express';
+import cors from 'cors';
+import multer from 'multer';
+import axios from 'axios';
+import { put } from '@vercel/blob';
+import processor from './processor.js';
 
 const app = express();
 app.use(cors());
@@ -13,7 +13,7 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
 /**
- * Two-Way Cloud Branding (Zero-Limit Architecture)
+ * Two-Way Cloud Branding (Zero-Limit Architecture) - ESM Version
  */
 app.post('/api/process-single', upload.fields([
     { name: 'image', maxCount: 1 },
@@ -27,7 +27,7 @@ app.post('/api/process-single', upload.fields([
         const logoFile = req.files['logo'] ? req.files['logo'][0] : null;
         let imageBuffer = null;
 
-        // 1. Fetch Input Image (Buffer or Blob URL)
+        // 1. Fetch Input Image
         if (req.files['image']) {
             imageBuffer = req.files['image'][0].buffer;
         } else if (imagePwaUrl) {
@@ -47,7 +47,7 @@ app.post('/api/process-single', upload.fields([
             parsedWhatsappSettings
         );
 
-        // 3. Upload Branded Result to Vercel Blob (Bypassing Vercel Response Limits)
+        // 3. Upload Branded Result to Vercel Blob
         const timestamp = Date.now();
         const brandedBlob = await put(`results/branded_${timestamp}.png`, processedBuffer, {
             access: 'public',
@@ -65,10 +65,9 @@ app.post('/api/process-single', upload.fields([
         console.error('Two-Way Process error:', error);
         res.status(500).json({ 
             success: false, 
-            error: error.message,
-            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            error: error.message
         });
     }
 });
 
-module.exports = app;
+export default app;

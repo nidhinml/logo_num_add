@@ -1,14 +1,13 @@
-const express = require('express');
-const cors = require('cors');
-const { handleUpload } = require('@vercel/blob/client');
+import express from 'express';
+import cors from 'cors';
+import { handleUpload } from '@vercel/blob/client';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 /**
- * Vercel Blob Token Generator
- * This endpoint authorizes the client to upload files directly to Vercel Blob
+ * Vercel Blob Token Generator - ESM Version
  */
 app.post('/api/blob-upload', async (req, res) => {
     try {
@@ -16,7 +15,6 @@ app.post('/api/blob-upload', async (req, res) => {
             body: req.body,
             request: req,
             onBeforeGenerateToken: async (pathname) => {
-                // Here you can add user validation if needed
                 return {
                     allowedContentTypes: ['image/jpeg', 'image/png', 'image/webp'],
                     tokenPayload: JSON.stringify({
@@ -36,4 +34,4 @@ app.post('/api/blob-upload', async (req, res) => {
     }
 });
 
-module.exports = app;
+export default app;

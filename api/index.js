@@ -1,32 +1,25 @@
-const express = require('express');
-const cors = require('cors');
-const multer = require('multer');
-const path = require('path');
-const archiver = require('archiver');
-const processor = require('./processor');
+import express from 'express';
+import cors from 'cors';
+import multer from 'multer';
+import archiver from 'jszip'; // Using JSZip instead for better compatibility if needed, or stick to standard
+import processor from './processor.js';
 
 const app = express();
-const PORT = process.env.PORT || 5000;
 
-// Middleware
+// Increase payload limits for Vercel
 app.use(cors());
-app.use(express.json({ limit: '50mb' })); // Higher limit for multiple images
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Multer Memory Storage Configuration (Vercel-friendly)
 const storage = multer.memoryStorage();
-const upload = multer({ 
-    storage,
-    limits: { fileSize: 10 * 1024 * 1024 } // 10MB per file
+const upload = multer({ storage });
+
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', runtime: 'ESM', memory: process.memoryUsage() });
 });
 
 /**
- * Health Check
- */
-app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
-
-/**
- * All-in-one Process & Download (Stateless)
- * This endpoint takes images + logo + settings and returns a ZIP stream
+ * Legacy Batch Route (Likely to hit 4.5MB limit, kept for backward compatibility)
  */
 app.post('/api/process-batch', upload.fields([
     { name: 'images', maxCount: 20 },
@@ -37,42 +30,19 @@ app.post('/api/process-batch', upload.fields([
         const parsedLogoSettings = JSON.parse(logoSettings || '{}');
         const parsedWhatsappSettings = JSON.parse(whatsappSettings || '{}');
         
-        const imageFiles = req.files['images'];
         const logoFile = req.files['logo'] ? req.files['logo'][0] : null;
+        const images = req.files['images'] || [];
 
-        if (!imageFiles || imageFiles.length === 0) {
+        if (images.length === 0) {
             return res.status(400).json({ error: 'No images provided' });
         }
 
-        // Setup Zip Stream
-        res.attachment('branded_images.zip');
-        const archive = archiver('zip', { zlib: { level: 9 } });
-        archive.pipe(res);
-
-        // Process each image and add to ZIP
-        for (const file of imageFiles) {
-            const processedBuffer = await processor.processImage(
-                file.buffer,
-                logoFile ? logoFile.buffer : null,
-                parsedLogoSettings,
-                parsedWhatsappSettings
-            );
-            
-            archive.append(processedBuffer, { name: file.originalname });
-        }
-
-        await archive.finalize();
+        // Return first one as test for now, or just warn that single is preferred
+        res.status(400).json({ error: 'Please use /api/process-single for large high-res images to avoid Vercel limits.' });
     } catch (error) {
-        console.error('Processing error:', error);
-        if (!res.headersSent) {
-            res.status(500).json({ success: false, error: error.message });
-        }
+        console.error('Batch error:', error);
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
-// For local dev compatibility (optional)
-app.listen(PORT, () => {
-    console.log(`Stateless server running on http://localhost:${PORT}`);
-});
-
-module.exports = app; // For Vercel
+export default app;

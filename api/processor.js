@@ -1,7 +1,12 @@
-const sharp = require('sharp');
+import sharp from 'sharp';
+
+// Disable Sharp cache and limit concurrency to minimize memory usage in Vercel functions
+sharp.cache(false);
+sharp.concurrency(1);
 
 /**
  * Main processor for branding images (Stateless / Buffer-based)
+ * Refactored to ES Modules
  */
 class ImageProcessor {
     /**
@@ -34,7 +39,7 @@ class ImageProcessor {
             return await image
                 .composite(compositeLayers)
                 .withMetadata()
-                .toFormat(metadata.format, { quality: 100 })
+                .toFormat(metadata.format || 'png', { quality: 100 })
                 .toBuffer();
         } catch (error) {
             console.error('Error processing image:', error);
@@ -51,14 +56,12 @@ class ImageProcessor {
 
         // 1. Transparent Background Logic (Smart Alpha)
         if (removeBackground) {
-            // Remove near-white pixels (threshold-based alpha)
             logo = logo.ensureAlpha()
-                .toFormat('png')
                 .composite([{
                     input: await sharp(buffer)
                         .greyscale()
                         .negate()
-                        .threshold(10) // Targets white-ish backgrounds
+                        .threshold(10)
                         .toBuffer(),
                     blend: 'dest-in'
                 }]);
@@ -108,7 +111,6 @@ class ImageProcessor {
         const iconSize = Math.round(actualFontSize * 1.2);
         const textColor = color || 'white';
         
-        // Font Selection
         let fontFamily = 'Arial, sans-serif';
         let fontWeight = 'bold';
         if (fontStyle === 'elegant') {
@@ -209,4 +211,4 @@ class ImageProcessor {
     }
 }
 
-module.exports = new ImageProcessor();
+export default new ImageProcessor();
