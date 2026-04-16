@@ -36,7 +36,7 @@ function App() {
     isProcessing: false,
     currentStep: 0,
     totalSteps: 0,
-    status: '', // 'Uploading...', 'Branding...'
+    status: '', 
     processedFiles: [] 
   });
 
@@ -64,7 +64,7 @@ function App() {
   };
 
   /**
-   * Advanced Sequential Processing (Bypasses Vercel 4.5MB limit using Vercel Blob)
+   * Two-Way Sequential Processing (Zero-Limit Architecture)
    */
   const handleProcessSequential = async (mode = 'zip') => {
     if (images.length === 0) return;
@@ -73,65 +73,64 @@ function App() {
       isProcessing: true,
       currentStep: 0,
       totalSteps: images.length,
-      status: 'Initializing...',
+      status: 'Readying...',
       processedFiles: []
     });
 
-    const results = [];
+    const results = []; // { name: string, blob: Blob, url: string }
     const zip = new JSZip();
 
     try {
       for (let i = 0; i < images.length; i++) {
         const img = images[i];
-        const isLarge = img.file.size > 4 * 1024 * 1024; // > 4MB
+        const isLarge = img.file.size > 1 * 1024 * 1024; // > 1MB for safety on Vercel
         
         setProcessingState(prev => ({ 
           ...prev, 
           currentStep: i + 1,
-          status: isLarge ? 'Uploading Large Image...' : 'Sending to Brand...' 
+          status: isLarge ? 'Uploading to Cloud...' : 'Sending to Server...' 
         }));
         
         let blobUrl = null;
         if (isLarge) {
-          // 1. Client-side upload to Vercel Blob for large files
-          try {
-            const blob = await upload(`branding/${img.name}`, img.file, {
-              access: 'public',
-              handleUploadUrl: '/api/blob-upload'
-            });
-            blobUrl = blob.url;
-          } catch (blobErr) {
-            console.error('Blob upload failed', blobErr);
-            // Fallback to direct upload if blob fails (might still fail 413)
-          }
+          const blob = await upload(`branding/${img.name}`, img.file, {
+            access: 'public',
+            handleUploadUrl: '/api/blob-upload'
+          });
+          blobUrl = blob.url;
         }
 
-        // 2. Request branding from the backend
         const formData = new FormData();
-        if (blobUrl) {
-          formData.append('imagePwaUrl', blobUrl);
-        } else {
-          formData.append('image', img.file);
-        }
+        if (blobUrl) formData.append('imagePwaUrl', blobUrl);
+        else formData.append('image', img.file);
         
         if (logo) formData.append('logo', logo.file);
         formData.append('logoSettings', JSON.stringify(logoSettings));
         formData.append('whatsappSettings', JSON.stringify(whatsappSettings));
 
-        setProcessingState(prev => ({ ...prev, status: 'Branding...' }));
+        setProcessingState(prev => ({ ...prev, status: 'Branding in Cloud...' }));
 
-        const res = await axios.post(`${API_BASE}/process-single`, formData, {
-          responseType: 'blob'
-        });
-
-        const processedBlob = new Blob([res.data], { type: 'image/png' });
-        results.push({ name: img.name, blob: processedBlob });
+        const response = await axios.post(`${API_BASE}/process-single`, formData);
         
-        const fileName = img.name.replace(/\.[^/.]+$/, "") + "_branded.png";
-        zip.file(fileName, processedBlob);
+        if (response.data.success) {
+          const cloudResultUrl = response.data.brandedUrl;
+          
+          // Fetch the branded image back as a blob for local zipping/sharing
+          // This happens client-side and is NOT limited by Vercel's gateway
+          setProcessingState(prev => ({ ...prev, status: 'Retrieving Result...' }));
+          const blobRes = await fetch(cloudResultUrl);
+          const processedBlob = await blobRes.blob();
+
+          results.push({ name: img.name, blob: processedBlob, url: cloudResultUrl });
+          
+          const fileName = img.name.replace(/\.[^/.]+$/, "") + "_branded.png";
+          zip.file(fileName, processedBlob);
+        } else {
+          throw new Error(response.data.error || 'Unknown branding error');
+        }
       }
 
-      setProcessingState(prev => ({ ...prev, status: 'Finalizing...' }));
+      setProcessingState(prev => ({ ...prev, status: 'Preparing Bundle...' }));
 
       if (mode === 'zip') {
         const zipBlob = await zip.generateAsync({ type: 'blob' });
@@ -148,17 +147,17 @@ function App() {
           await navigator.share({
             files: shareFiles,
             title: 'Branded Images',
-            text: 'Your branded images are ready!'
+            text: 'Here are your branded high-res images!'
           });
         } catch (err) {
-          console.log('Share error', err);
+          console.log('Share canceled');
         }
       }
 
       setProcessingState(prev => ({ ...prev, processedFiles: results }));
     } catch (err) {
       console.error(err);
-      alert('Error: ' + (err.response?.status === 413 ? "File too large. Ensure Vercel Blob is connected." : err.message));
+      alert('Error: ' + (err.response?.status === 413 ? "Payload Too Large (Vercel limit). Use smaller files or check Vercel Blob settings." : err.message));
     } finally {
       setProcessingState(prev => ({ ...prev, isProcessing: false, status: '' }));
     }
@@ -166,36 +165,36 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
-      <header className="h-16 border-b border-slate-800 flex items-center justify-between px-8 sticky top-0 bg-slate-950/80 backdrop-blur-md z-50 overflow-hidden">
+      <header className="h-16 border-b border-slate-800 flex items-center justify-between px-8 sticky top-0 bg-slate-950/80 backdrop-blur-md z-50">
         <div className="flex items-center gap-2">
-          <div className="bg-primary-500 p-2 rounded-lg">
+          <div className="bg-primary-500 p-2 rounded-lg shadow-lg shadow-primary-500/20">
             <ImageIcon className="w-6 h-6 text-white" />
           </div>
-          <h1 className="text-xl font-bold tracking-tight">BrandFlow<span className="text-primary-500">AI</span></h1>
+          <h1 className="text-xl font-extrabold tracking-tighter">BRANDFLOW<span className="text-primary-500 italic">PRO</span></h1>
         </div>
         
         <div className="flex items-center gap-3">
           <button 
             onClick={() => handleProcessSequential('zip')}
             disabled={images.length === 0 || processingState.isProcessing}
-            className="bg-primary-600 hover:bg-primary-500 disabled:opacity-50 disabled:cursor-not-allowed px-6 py-2 rounded-full font-medium transition-all flex items-center gap-2 shadow-lg shadow-primary-600/20"
+            className="bg-primary-600 hover:bg-primary-500 disabled:opacity-50 disabled:cursor-not-allowed px-6 py-2 rounded-full font-bold transition-all flex items-center gap-2 shadow-xl shadow-primary-600/30 ring-1 ring-primary-400/30"
           >
             {processingState.isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
             {processingState.isProcessing 
               ? `${processingState.status} (${processingState.currentStep}/${processingState.totalSteps})` 
-              : 'Download ZIP'
+              : 'Secure ZIP Download'
             }
           </button>
         </div>
       </header>
 
       <div className="flex-1 flex overflow-hidden flex-col md:flex-row">
-        <aside className="w-full md:w-80 border-r border-slate-800 overflow-y-auto p-6 flex flex-col gap-8 bg-slate-950 z-40 shadow-2xl transition-all">
+        <aside className="w-full md:w-80 border-r border-slate-800 overflow-y-auto p-6 flex flex-col gap-8 bg-slate-950 z-40">
           <section>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Base Images</h2>
-              <span className="bg-primary-900/40 text-primary-400 text-[10px] px-2 py-0.5 rounded-full border border-primary-800/30 flex items-center gap-1">
-                <Zap className="w-2.5 h-2.5" /> High-Res Ready
+              <h2 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Base Content</h2>
+              <span className="bg-green-900/40 text-green-400 text-[9px] px-2 py-0.5 rounded-full border border-green-800/30 flex items-center gap-1 font-bold">
+                <Zap className="w-2.5 h-2.5" /> CLOUD MODE
               </span>
             </div>
             <Uploader 
@@ -204,16 +203,10 @@ function App() {
               label="Upload Images"
               icon={<Upload className="w-5 h-5" />}
             />
-            {images.length > 0 && (
-              <div className="mt-2 text-xs text-slate-500 flex justify-between items-center px-1">
-                <span>{images.length} files selected</span>
-                <button onClick={() => setImages([])} className="text-red-400 hover:text-red-300">Clear All</button>
-              </div>
-            )}
           </section>
 
           <section>
-            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Branding Logo</h2>
+            <h2 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Identity Logo</h2>
             {!logo ? (
               <Uploader 
                 onUpload={(files) => handleLocalLogoUpload(files[0])} 
@@ -222,13 +215,13 @@ function App() {
                 icon={<ImageIcon className="w-5 h-5" />}
               />
             ) : (
-              <div className="relative group rounded-xl border border-slate-700 p-2 bg-slate-900/50">
-                <img src={logo.url} alt="Logo" className="max-h-20 mx-auto object-contain" />
+              <div className="relative group rounded-3xl border border-slate-700 p-3 bg-slate-900/50 hover:border-primary-500/50 transition-colors">
+                <img src={logo.url} alt="Logo" className="max-h-24 mx-auto object-contain" />
                 <button 
                   onClick={() => setLogo(null)}
-                  className="absolute -top-2 -right-2 bg-red-500 p-1.5 rounded-full shadow-lg hover:rotate-90 transition-all duration-300"
+                  className="absolute -top-2 -right-2 bg-red-600 p-2 rounded-full shadow-2xl hover:bg-red-500 transition-colors"
                 >
-                  <Trash2 className="w-3" />
+                  <Trash2 className="w-3.5 h-3.5 text-white" />
                 </button>
               </div>
             )}
@@ -242,17 +235,19 @@ function App() {
           />
         </aside>
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-10 bg-slate-950">
+        <main className="flex-1 overflow-y-auto p-4 md:p-10 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-slate-950">
           {images.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-slate-600 gap-4 opacity-60">
-              <div className="w-24 h-24 rounded-full bg-slate-900 flex items-center justify-center border-2 border-slate-800 border-dashed animate-pulse">
-                <Upload className="w-10 h-10" />
+            <div className="h-full flex flex-col items-center justify-center text-slate-800 gap-6">
+              <div className="w-32 h-32 rounded-full bg-slate-900/50 flex items-center justify-center border-2 border-slate-800 border-dashed animate-pulse">
+                <ImageIcon className="w-12 h-12" />
               </div>
-              <p className="text-xl font-medium">Ready for your content</p>
-              <p className="text-sm">Vercel Blob enabled for massive images</p>
+              <div className="text-center space-y-2">
+                <p className="text-2xl font-bold text-slate-400">Secure Cloud Production</p>
+                <p className="text-sm text-slate-600 max-w-xs">Supports high-res images exceeding 10MB per file with Two-Way Cloud processing.</p>
+              </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 pb-28">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-10 pb-32">
               {images.map((img, idx) => (
                 <ImagePreview 
                   key={idx}
@@ -269,14 +264,14 @@ function App() {
       </div>
 
       {images.length > 0 && canShare && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] w-full max-w-xs px-4">
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] w-full max-w-sm px-6">
           <button 
             onClick={() => handleProcessSequential('share')}
             disabled={processingState.isProcessing}
-            className="w-full bg-green-600 hover:bg-green-500 text-white py-4 rounded-3xl font-bold shadow-[0_20px_50px_rgba(22,163,74,0.4)] flex items-center justify-center gap-3 transition-all transform hover:-translate-y-1 active:scale-95"
+            className="w-full bg-green-600 hover:bg-green-500 text-white py-5 rounded-3xl font-extrabold shadow-[0_25px_60px_-15px_rgba(22,163,74,0.6)] flex items-center justify-center gap-4 transition-all hover:scale-[1.02] active:scale-95 border-b-4 border-green-800"
           >
-            {processingState.isProcessing ? <Loader2 className="w-6 h-6 animate-spin" /> : <Share2 className="w-6 h-6" />}
-            {processingState.isProcessing ? 'Baking...' : 'Save Directly to Photos'}
+            {processingState.isProcessing ? <Loader2 className="w-7 h-7 animate-spin" /> : <Share2 className="w-7 h-7" />}
+            {processingState.isProcessing ? 'PROCESSING...' : 'SAVE ALL TO PHOTOS'}
           </button>
         </div>
       )}

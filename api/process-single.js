@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
 const axios = require('axios');
+const { put } = require('@vercel/blob');
 const processor = require('./processor');
 
 const app = express();
@@ -12,8 +13,7 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
 /**
- * Handle Single Image Processing
- * Supports both File Upload (Buffer) AND Blob URL
+ * Two-Way Cloud Branding (Zero-Limit Architecture)
  */
 app.post('/api/process-single', upload.fields([
     { name: 'image', maxCount: 1 },
@@ -27,12 +27,10 @@ app.post('/api/process-single', upload.fields([
         const logoFile = req.files['logo'] ? req.files['logo'][0] : null;
         let imageBuffer = null;
 
-        // Option A: Direct upload (Subject to 4.5MB limit)
+        // 1. Fetch Input Image (Buffer or Blob URL)
         if (req.files['image']) {
             imageBuffer = req.files['image'][0].buffer;
-        } 
-        // Option B: Vercel Blob URL (Supports huge images)
-        else if (imagePwaUrl) {
+        } else if (imagePwaUrl) {
             const response = await axios.get(imagePwaUrl, { responseType: 'arraybuffer' });
             imageBuffer = Buffer.from(response.data);
         }
@@ -41,6 +39,7 @@ app.post('/api/process-single', upload.fields([
             return res.status(400).json({ error: 'No image provided' });
         }
 
+        // 2. Process High-Res Branding
         const processedBuffer = await processor.processImage(
             imageBuffer,
             logoFile ? logoFile.buffer : null,
@@ -48,11 +47,27 @@ app.post('/api/process-single', upload.fields([
             parsedWhatsappSettings
         );
 
-        res.set('Content-Type', 'image/png');
-        res.send(processedBuffer);
+        // 3. Upload Branded Result to Vercel Blob (Bypassing Vercel Response Limits)
+        const timestamp = Date.now();
+        const brandedBlob = await put(`results/branded_${timestamp}.png`, processedBuffer, {
+            access: 'public',
+            contentType: 'image/png'
+        });
+
+        // 4. Return the Cloud URL
+        res.json({
+            success: true,
+            brandedUrl: brandedBlob.url,
+            name: brandedBlob.pathname
+        });
+
     } catch (error) {
-        console.error('Process error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        console.error('Two-Way Process error:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
     }
 });
 
