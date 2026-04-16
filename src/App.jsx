@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Upload, Image as ImageIcon, CheckCircle, Download, Trash2, Smartphone, Monitor, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Upload, Image as ImageIcon, CheckCircle, Download, Trash2, Smartphone, Monitor, RefreshCw, Share2 } from 'lucide-react';
 import axios from 'axios';
 import BrandingControls from './components/BrandingControls';
 import ImagePreview from './components/ImagePreview';
@@ -14,7 +14,9 @@ function App() {
     size: 'medium',
     position: 'bottom-right',
     opacity: 1,
-    offset: { x: 20, y: 20 }
+    offset: { x: 20, y: 20 },
+    removeBackground: false,
+    useOriginalSize: false
   });
   const [whatsappSettings, setWhatsappSettings] = useState({
     enabled: false,
@@ -24,10 +26,16 @@ function App() {
     position: 'bottom-left',
     offset: { x: 20, y: 20 },
     showIcon: true,
-    showNumber: true
+    showNumber: true,
+    fontStyle: 'modern'
   });
   const [isProcessing, setIsProcessing] = useState(false);
   const [downloadUrl, setDownloadUrl] = useState(null);
+  const [canShare, setCanShare] = useState(false);
+
+  useEffect(() => {
+    setCanShare(!!navigator.share);
+  }, []);
 
   const handleLocalUpload = (files) => {
     const newImages = files.map(file => ({
@@ -46,7 +54,7 @@ function App() {
     });
   };
 
-  const handleProcess = async () => {
+  const handleProcess = async (mode = 'download') => {
     if (images.length === 0) return;
     setIsProcessing(true);
     setDownloadUrl(null);
@@ -67,12 +75,26 @@ function App() {
       const url = URL.createObjectURL(blob);
       setDownloadUrl(url);
 
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', 'branded_images.zip');
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+      if (mode === 'share' && canShare) {
+        // Native Share API for mobile (Saving to Photos)
+        const file = new File([res.data], 'branded_images.zip', { type: 'application/zip' });
+        try {
+          await navigator.share({
+            files: [file],
+            title: 'Branded Images',
+            text: 'Your branded images are ready!'
+          });
+        } catch (err) {
+          console.log('Share failed or cancelled', err);
+        }
+      } else {
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', 'branded_images.zip');
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
 
     } catch (err) {
       alert('Processing failed: ' + err.message);
@@ -91,20 +113,29 @@ function App() {
           <h1 className="text-xl font-bold tracking-tight">BrandFlow<span className="text-primary-500">AI</span></h1>
         </div>
         
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          {canShare && (
+             <button 
+              onClick={() => handleProcess('share')}
+              disabled={images.length === 0 || isProcessing}
+              className="hidden md:flex bg-slate-800 hover:bg-slate-700 disabled:opacity-50 px-5 py-2 rounded-full font-medium transition-all items-center gap-2 border border-slate-700"
+            >
+              <Share2 className="w-4 h-4" /> Share to Phone
+            </button>
+          )}
           <button 
-            onClick={handleProcess}
+            onClick={() => handleProcess('download')}
             disabled={images.length === 0 || isProcessing}
             className="bg-primary-600 hover:bg-primary-500 disabled:opacity-50 disabled:cursor-not-allowed px-6 py-2 rounded-full font-medium transition-all flex items-center gap-2 shadow-lg shadow-primary-600/20"
           >
             {isProcessing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-            {isProcessing ? 'Baking...' : 'Brand & Download ZIP'}
+            {isProcessing ? 'Baking...' : 'Brand All'}
           </button>
         </div>
       </header>
 
       <div className="flex-1 flex overflow-hidden flex-col md:flex-row">
-        <aside className="w-full md:w-80 border-r border-slate-800 overflow-y-auto p-6 flex flex-col gap-8 bg-slate-950 z-40">
+        <aside className="w-full md:w-80 border-r border-slate-800 overflow-y-auto p-6 flex flex-col gap-8 bg-slate-950 z-40 shadow-2xl">
           <section>
             <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Base Images</h2>
             <Uploader 
@@ -135,7 +166,7 @@ function App() {
                 <img src={logo.url} alt="Logo" className="max-h-20 mx-auto object-contain" />
                 <button 
                   onClick={() => setLogo(null)}
-                  className="absolute -top-2 -right-2 bg-red-500 p-1.5 rounded-full shadow-lg"
+                  className="absolute -top-2 -right-2 bg-red-500 p-1.5 rounded-full shadow-lg hover:scale-110 transition-transform"
                 >
                   <Trash2 className="w-3 h-3 text-white" />
                 </button>
@@ -151,17 +182,17 @@ function App() {
           />
         </aside>
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-10 bg-slate-900/20">
+        <main className="flex-1 overflow-y-auto p-4 md:p-10 bg-slate-950">
           {images.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-600 gap-4 opacity-60">
-              <div className="w-24 h-24 rounded-full bg-slate-900 flex items-center justify-center border-2 border-slate-800 border-dashed">
+              <div className="w-24 h-24 rounded-full bg-slate-900 flex items-center justify-center border-2 border-slate-800 border-dashed animate-pulse">
                 <Upload className="w-10 h-10" />
               </div>
               <p className="text-xl font-medium">Ready for your content</p>
               <p className="text-sm">Upload images to see live branding preview</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 pb-20">
               {images.map((img, idx) => (
                 <ImagePreview 
                   key={idx}
@@ -177,10 +208,18 @@ function App() {
         </main>
       </div>
 
-      <div className="md:hidden p-4 bg-primary-900/30 border-t border-primary-800/30 flex items-center justify-between text-xs text-primary-200">
-        <span>Install as app: Tap <strong>Share</strong> &gt; <strong>Add to Home Screen</strong></span>
-        <Smartphone className="w-4 h-4" />
-      </div>
+      {canShare && images.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] md:hidden">
+          <button 
+            onClick={() => handleProcess('share')}
+            disabled={isProcessing}
+            className="bg-green-600 hover:bg-green-500 text-white px-8 py-3 rounded-full font-bold shadow-2xl flex items-center gap-3 animate-in fade-in zoom-in slide-in-from-bottom-10"
+          >
+            {isProcessing ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Share2 className="w-5 h-5" />}
+            Save All to Photos
+          </button>
+        </div>
+      )}
     </div>
   );
 }
