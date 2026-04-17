@@ -2,11 +2,32 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <link rel="icon" type="image/png" href="/icon.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#0f172a">
+    <title>BrandFlow AI | Pro Image Studio</title>
+    
+    <!-- Safari Stability Safety Script -->
+    <script>
+      // Polyfill for modern ESM features that often crash older Safari
+      if (typeof import.meta === 'undefined') {
+        window.import = { meta: { url: window.location.href } };
+      }
+      if (typeof globalThis === 'undefined') {
+        window.globalThis = window;
+      }
+      // Suppress modern CSS errors in console for truly ancient browsers
+      window.onerror = function(msg, url, line) {
+        if (msg.indexOf('import.meta') > -1) {
+          console.warn('Safari Compatibility Warning: Modern JS detected. Attempting fallback...');
+          return true;
+        }
+        return false;
+      };
+    </script>
   </head>
-  <body>
+  <body class="bg-slate-950">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

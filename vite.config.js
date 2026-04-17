@@ -8,7 +8,8 @@ export default defineConfig({
   plugins: [
     react(),
     legacy({
-      targets: ['defaults', 'not IE 11', 'Safari 12'],
+      targets: ['defaults', 'not IE 11', 'Safari 13'],
+      additionalLegacyPolyfills: ['regenerator-runtime/runtime'],
     }),
     VitePWA({
       registerType: 'autoUpdate',
@@ -21,22 +22,18 @@ export default defineConfig({
         background_color: '#0f172a',
         display: 'standalone',
         icons: [
-          {
-            src: 'icon.png',
-            sizes: '512x512',
-            type: 'image/png'
-          },
-          {
-            src: 'icon.png',
-            sizes: '192x192',
-            type: 'image/png'
-          }
+          { src: 'icon.png', sizes: '512x512', type: 'image/png' },
+          { src: 'icon.png', sizes: '192x192', type: 'image/png' }
         ]
       }
     })
   ],
   build: {
-    target: 'es2015',
+    target: 'es2019',
     minify: 'terser',
+    cssTarget: 'safari13',
+    commonjsOptions: {
+      transformMixedEsModules: true,
+    }
   }
 })
