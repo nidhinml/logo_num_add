@@ -1,11 +1,15 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import legacy from '@vitejs/plugin-legacy'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
     react(),
+    legacy({
+      targets: ['defaults', 'not IE 11', 'Safari 12'],
+    }),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['icon.png', 'apple-touch-icon.png'],
@@ -31,4 +35,8 @@ export default defineConfig({
       }
     })
   ],
+  build: {
+    target: 'es2015',
+    minify: 'terser',
+  }
 })
